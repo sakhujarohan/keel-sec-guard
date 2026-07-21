@@ -17081,7 +17081,7 @@ var GoogleGenerativeAI = class {
 
 // src/llm.ts
 var sleep2 = (ms) => new Promise((resolve4) => setTimeout(resolve4, ms));
-async function auditWithGemini(diffPayload, sastFindings, apiKey, modelName = "gemini-2.5-flash", maxRetries = 3, anthropicApiKey = process.env.ANTHROPIC_API_KEY || "") {
+async function auditWithGemini(diffPayload, sastFindings, apiKey, modelName = "gemini-3.6-flash", maxRetries = 3, anthropicApiKey = process.env.ANTHROPIC_API_KEY || "") {
   const prompt = `
 You are an expert Application Security Auditor reviewing a Pull Request.
 
@@ -17125,7 +17125,9 @@ Respond ONLY in valid JSON matching this schema:
 }
 `;
   if (apiKey) {
-    const candidateModels = Array.from(/* @__PURE__ */ new Set([modelName, "gemini-2.5-flash", "gemini-2.5-pro", "gemini-2.0-flash"]));
+    const candidateModels = Array.from(
+      /* @__PURE__ */ new Set([modelName, "gemini-3.6-flash", "gemini-3.5-flash", "gemini-2.5-flash", "gemini-2.5-pro", "gemini-2.0-flash"])
+    );
     const genAI = new GoogleGenerativeAI(apiKey);
     for (const currentModel of candidateModels) {
       let attempt = 0;

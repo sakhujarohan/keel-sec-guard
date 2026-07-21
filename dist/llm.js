@@ -1,7 +1,7 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-export async function auditWithGemini(diffPayload, sastFindings, apiKey, modelName = 'gemini-2.5-flash', maxRetries = 3, anthropicApiKey = process.env.ANTHROPIC_API_KEY || '') {
+export async function auditWithGemini(diffPayload, sastFindings, apiKey, modelName = 'gemini-3.6-flash', maxRetries = 3, anthropicApiKey = process.env.ANTHROPIC_API_KEY || '') {
     const prompt = `
 You are an expert Application Security Auditor reviewing a Pull Request.
 
@@ -45,7 +45,7 @@ Respond ONLY in valid JSON matching this schema:
 }
 `;
     if (apiKey) {
-        const candidateModels = Array.from(new Set([modelName, 'gemini-2.5-flash', 'gemini-2.5-pro', 'gemini-2.0-flash']));
+        const candidateModels = Array.from(new Set([modelName, 'gemini-3.6-flash', 'gemini-3.5-flash', 'gemini-2.5-flash', 'gemini-2.5-pro', 'gemini-2.0-flash']));
         const genAI = new GoogleGenerativeAI(apiKey);
         for (const currentModel of candidateModels) {
             let attempt = 0;
