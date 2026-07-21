@@ -1,7 +1,7 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-export async function auditWithGemini(diffPayload, sastFindings, apiKey, modelName = 'gemini-3.6-flash', maxRetries = 3, anthropicApiKey = process.env.ANTHROPIC_API_KEY || '') {
+export async function auditWithGemini(diffPayload, sastFindings, apiKeyInput = '', modelName = 'gemini-3.6-flash', maxRetries = 3, anthropicApiKey = process.env.ANTHROPIC_API_KEY || '') {
     const prompt = `
 You are an expert Application Security Auditor reviewing a Pull Request.
 
@@ -44,53 +44,64 @@ Respond ONLY in valid JSON matching this schema:
   ]
 }
 `;
-    if (apiKey) {
+    // Aggregate and deduplicate all provided Gemini API keys
+    const geminiKeys = extractGeminiApiKeys(apiKeyInput);
+    if (geminiKeys.length > 0) {
         const candidateModels = Array.from(new Set([modelName, 'gemini-3.6-flash', 'gemini-3.5-flash', 'gemini-2.5-flash', 'gemini-2.5-pro', 'gemini-2.0-flash']));
-        const genAI = new GoogleGenerativeAI(apiKey);
         for (const currentModel of candidateModels) {
-            let attempt = 0;
-            let delay = 2000;
-            while (attempt < maxRetries) {
-                try {
-                    if (attempt > 0) {
-                        console.log(`🔄 Retrying Gemini API call (${currentModel}) - Attempt ${attempt + 1}/${maxRetries} after ${delay}ms...`);
-                        await sleep(delay);
-                        delay *= 2;
-                    }
-                    const model = genAI.getGenerativeModel({
-                        model: currentModel,
-                        generationConfig: {
-                            responseMimeType: 'application/json',
-                            temperature: 0.1,
-                            maxOutputTokens: 8192,
-                        },
-                    });
-                    const result = await model.generateContent(prompt);
-                    const responseText = result.response.text();
-                    const parsed = JSON.parse(responseText);
-                    return sanitizeAuditResult(parsed);
-                }
-                catch (error) {
-                    const errMessage = error?.message || String(error);
-                    console.warn(`⚠️ Gemini model ${currentModel} error (Attempt ${attempt + 1}): ${errMessage.split('\n')[0]}`);
-                    if (errMessage.includes('429') || errMessage.includes('Quota exceeded')) {
-                        console.warn(`⏳ Gemini rate limit (429) encountered. Pausing 6 seconds...`);
-                        await sleep(6000);
-                    }
-                    else if (errMessage.includes('404') || errMessage.includes('not found') || errMessage.includes('503') || errMessage.includes('high demand')) {
-                        if (attempt >= 1) {
-                            console.warn(`⚡ Switching from ${currentModel} to fallback model...`);
-                            break;
+            for (let keyIdx = 0; keyIdx < geminiKeys.length; keyIdx++) {
+                const currentKey = geminiKeys[keyIdx];
+                const genAI = new GoogleGenerativeAI(currentKey);
+                let attempt = 0;
+                let delay = 1500;
+                while (attempt < maxRetries) {
+                    try {
+                        if (attempt > 0) {
+                            console.log(`🔄 Retrying Gemini API call (${currentModel}) [Key #${keyIdx + 1}] - Attempt ${attempt + 1}/${maxRetries} after ${delay}ms...`);
+                            await sleep(delay);
+                            delay *= 2;
                         }
+                        const model = genAI.getGenerativeModel({
+                            model: currentModel,
+                            generationConfig: {
+                                responseMimeType: 'application/json',
+                                temperature: 0.1,
+                                maxOutputTokens: 8192,
+                            },
+                        });
+                        const result = await model.generateContent(prompt);
+                        const responseText = result.response.text();
+                        const parsed = JSON.parse(responseText);
+                        return sanitizeAuditResult(parsed);
                     }
-                    attempt++;
+                    catch (error) {
+                        const errMessage = error?.message || String(error);
+                        console.warn(`⚠️ Gemini model ${currentModel} [Key #${keyIdx + 1}] error: ${errMessage.split('\n')[0]}`);
+                        if (errMessage.includes('429') || errMessage.includes('Quota exceeded')) {
+                            if (keyIdx < geminiKeys.length - 1) {
+                                console.warn(`🔑 Key #${keyIdx + 1} rate limited (429). Seamlessly failing over to Key #${keyIdx + 2}...`);
+                                break; // Break attempt loop to switch to the next key immediately!
+                            }
+                            else {
+                                console.warn(`⏳ All Gemini API keys rate limited. Pausing 6 seconds...`);
+                                await sleep(6000);
+                            }
+                        }
+                        else if (errMessage.includes('404') || errMessage.includes('not found') || errMessage.includes('503') || errMessage.includes('high demand')) {
+                            if (attempt >= 1) {
+                                console.warn(`⚡ Switching from ${currentModel} to fallback model...`);
+                                break;
+                            }
+                        }
+                        attempt++;
+                    }
                 }
             }
         }
-        console.warn(`⚠️ Gemini API calls exhausted across all models.`);
+        console.warn(`⚠️ Gemini API calls exhausted across all keys and models.`);
     }
     else {
-        console.log('⚠️ GEMINI_API_KEY not provided.');
+        console.log('⚠️ No GEMINI_API_KEY provided.');
     }
     // -------------------------------------------------------------------------
     // Anthropic Claude Ultimate Failover Leg (Latest Sonnet Models)
@@ -134,6 +145,29 @@ Respond ONLY in valid JSON matching this schema:
             recommendation: 'Review and remove flagged security patterns.',
         })),
     };
+}
+function extractGeminiApiKeys(input) {
+    const keys = [];
+    const addKeys = (val) => {
+        if (!val)
+            return;
+        val.split(',').forEach((k) => {
+            const trimmed = k.trim();
+            if (trimmed && !keys.includes(trimmed))
+                keys.push(trimmed);
+        });
+    };
+    if (Array.isArray(input)) {
+        input.forEach(addKeys);
+    }
+    else {
+        addKeys(input);
+    }
+    addKeys(process.env.GEMINI_API_KEY);
+    addKeys(process.env.GEMINI_API_KEY_2);
+    addKeys(process.env.GEMINI_API_KEY_3);
+    addKeys(process.env.GEMINI_API_KEYS);
+    return keys;
 }
 function sanitizeAuditResult(parsed) {
     if (parsed.findings) {

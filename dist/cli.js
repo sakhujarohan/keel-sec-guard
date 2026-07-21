@@ -17081,7 +17081,7 @@ var GoogleGenerativeAI = class {
 
 // src/llm.ts
 var sleep2 = (ms) => new Promise((resolve4) => setTimeout(resolve4, ms));
-async function auditWithGemini(diffPayload, sastFindings, apiKey, modelName = "gemini-3.6-flash", maxRetries = 3, anthropicApiKey = process.env.ANTHROPIC_API_KEY || "") {
+async function auditWithGemini(diffPayload, sastFindings, apiKeyInput = "", modelName = "gemini-3.6-flash", maxRetries = 3, anthropicApiKey = process.env.ANTHROPIC_API_KEY || "") {
   const prompt = `
 You are an expert Application Security Auditor reviewing a Pull Request.
 
@@ -17124,52 +17124,61 @@ Respond ONLY in valid JSON matching this schema:
   ]
 }
 `;
-  if (apiKey) {
+  const geminiKeys = extractGeminiApiKeys(apiKeyInput);
+  if (geminiKeys.length > 0) {
     const candidateModels = Array.from(
       /* @__PURE__ */ new Set([modelName, "gemini-3.6-flash", "gemini-3.5-flash", "gemini-2.5-flash", "gemini-2.5-pro", "gemini-2.0-flash"])
     );
-    const genAI = new GoogleGenerativeAI(apiKey);
     for (const currentModel of candidateModels) {
-      let attempt = 0;
-      let delay = 2e3;
-      while (attempt < maxRetries) {
-        try {
-          if (attempt > 0) {
-            console.log(`\u{1F504} Retrying Gemini API call (${currentModel}) - Attempt ${attempt + 1}/${maxRetries} after ${delay}ms...`);
-            await sleep2(delay);
-            delay *= 2;
-          }
-          const model = genAI.getGenerativeModel({
-            model: currentModel,
-            generationConfig: {
-              responseMimeType: "application/json",
-              temperature: 0.1,
-              maxOutputTokens: 8192
+      for (let keyIdx = 0; keyIdx < geminiKeys.length; keyIdx++) {
+        const currentKey = geminiKeys[keyIdx];
+        const genAI = new GoogleGenerativeAI(currentKey);
+        let attempt = 0;
+        let delay = 1500;
+        while (attempt < maxRetries) {
+          try {
+            if (attempt > 0) {
+              console.log(`\u{1F504} Retrying Gemini API call (${currentModel}) [Key #${keyIdx + 1}] - Attempt ${attempt + 1}/${maxRetries} after ${delay}ms...`);
+              await sleep2(delay);
+              delay *= 2;
             }
-          });
-          const result = await model.generateContent(prompt);
-          const responseText = result.response.text();
-          const parsed = JSON.parse(responseText);
-          return sanitizeAuditResult(parsed);
-        } catch (error) {
-          const errMessage = error?.message || String(error);
-          console.warn(`\u26A0\uFE0F Gemini model ${currentModel} error (Attempt ${attempt + 1}): ${errMessage.split("\n")[0]}`);
-          if (errMessage.includes("429") || errMessage.includes("Quota exceeded")) {
-            console.warn(`\u23F3 Gemini rate limit (429) encountered. Pausing 6 seconds...`);
-            await sleep2(6e3);
-          } else if (errMessage.includes("404") || errMessage.includes("not found") || errMessage.includes("503") || errMessage.includes("high demand")) {
-            if (attempt >= 1) {
-              console.warn(`\u26A1 Switching from ${currentModel} to fallback model...`);
-              break;
+            const model = genAI.getGenerativeModel({
+              model: currentModel,
+              generationConfig: {
+                responseMimeType: "application/json",
+                temperature: 0.1,
+                maxOutputTokens: 8192
+              }
+            });
+            const result = await model.generateContent(prompt);
+            const responseText = result.response.text();
+            const parsed = JSON.parse(responseText);
+            return sanitizeAuditResult(parsed);
+          } catch (error) {
+            const errMessage = error?.message || String(error);
+            console.warn(`\u26A0\uFE0F Gemini model ${currentModel} [Key #${keyIdx + 1}] error: ${errMessage.split("\n")[0]}`);
+            if (errMessage.includes("429") || errMessage.includes("Quota exceeded")) {
+              if (keyIdx < geminiKeys.length - 1) {
+                console.warn(`\u{1F511} Key #${keyIdx + 1} rate limited (429). Seamlessly failing over to Key #${keyIdx + 2}...`);
+                break;
+              } else {
+                console.warn(`\u23F3 All Gemini API keys rate limited. Pausing 6 seconds...`);
+                await sleep2(6e3);
+              }
+            } else if (errMessage.includes("404") || errMessage.includes("not found") || errMessage.includes("503") || errMessage.includes("high demand")) {
+              if (attempt >= 1) {
+                console.warn(`\u26A1 Switching from ${currentModel} to fallback model...`);
+                break;
+              }
             }
+            attempt++;
           }
-          attempt++;
         }
       }
     }
-    console.warn(`\u26A0\uFE0F Gemini API calls exhausted across all models.`);
+    console.warn(`\u26A0\uFE0F Gemini API calls exhausted across all keys and models.`);
   } else {
-    console.log("\u26A0\uFE0F GEMINI_API_KEY not provided.");
+    console.log("\u26A0\uFE0F No GEMINI_API_KEY provided.");
   }
   if (anthropicApiKey) {
     const claudeModels = ["claude-3-7-sonnet-latest", "claude-3-5-sonnet-latest"];
@@ -17209,6 +17218,26 @@ Respond ONLY in valid JSON matching this schema:
       recommendation: "Review and remove flagged security patterns."
     }))
   };
+}
+function extractGeminiApiKeys(input) {
+  const keys = [];
+  const addKeys = (val) => {
+    if (!val) return;
+    val.split(",").forEach((k) => {
+      const trimmed = k.trim();
+      if (trimmed && !keys.includes(trimmed)) keys.push(trimmed);
+    });
+  };
+  if (Array.isArray(input)) {
+    input.forEach(addKeys);
+  } else {
+    addKeys(input);
+  }
+  addKeys(process.env.GEMINI_API_KEY);
+  addKeys(process.env.GEMINI_API_KEY_2);
+  addKeys(process.env.GEMINI_API_KEY_3);
+  addKeys(process.env.GEMINI_API_KEYS);
+  return keys;
 }
 function sanitizeAuditResult(parsed) {
   if (parsed.findings) {
