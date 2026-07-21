@@ -4608,7 +4608,7 @@ var GoogleGenerativeAI = class {
 
 // src/llm.ts
 var sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-async function auditWithGemini(diffPayload, sastFindings, apiKey, modelName = "gemini-2.5-flash", maxRetries = 2) {
+async function auditWithGemini(diffPayload, sastFindings, apiKey, modelName = "gemini-2.5-flash", maxRetries = 3) {
   if (!apiKey) {
     return {
       overallRisk: sastFindings.some((f) => f.severity === "CRITICAL" || f.severity === "HIGH") ? "HIGH" : "LOW",
@@ -4670,7 +4670,7 @@ Respond ONLY in valid JSON matching this schema:
   let lastError = null;
   for (const currentModel of candidateModels) {
     let attempt = 0;
-    let delay = 1500;
+    let delay = 2e3;
     while (attempt < maxRetries) {
       try {
         if (attempt > 0) {
@@ -4703,7 +4703,10 @@ Respond ONLY in valid JSON matching this schema:
         lastError = error;
         const errMessage2 = error?.message || String(error);
         console.warn(`\u26A0\uFE0F Gemini model ${currentModel} error (Attempt ${attempt + 1}): ${errMessage2}`);
-        if (errMessage2.includes("404") || errMessage2.includes("not found") || errMessage2.includes("503") || errMessage2.includes("high demand")) {
+        if (errMessage2.includes("429") || errMessage2.includes("Quota exceeded")) {
+          console.warn(`\u23F3 Gemini rate limit (429) encountered. Pausing 6 seconds for quota reset...`);
+          await sleep(6e3);
+        } else if (errMessage2.includes("404") || errMessage2.includes("not found") || errMessage2.includes("503") || errMessage2.includes("high demand")) {
           if (attempt >= 1) {
             console.warn(`\u26A1 Switching from ${currentModel} to fallback model...`);
             break;
