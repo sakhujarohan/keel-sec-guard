@@ -4532,7 +4532,8 @@ var GoogleGenerativeAI = class {
 };
 
 // src/llm.ts
-async function auditWithGemini(diffPayload, sastFindings, apiKey, modelName = "gemini-2.5-flash") {
+var sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+async function auditWithGemini(diffPayload, sastFindings, apiKey, modelName = "gemini-2.5-flash", maxRetries = 3) {
   if (!apiKey) {
     return {
       overallRisk: sastFindings.some((f) => f.severity === "CRITICAL" || f.severity === "HIGH") ? "HIGH" : "LOW",
@@ -4547,13 +4548,7 @@ async function auditWithGemini(diffPayload, sastFindings, apiKey, modelName = "g
       }))
     };
   }
-  try {
-    const genAI = new GoogleGenerativeAI(apiKey);
-    const model = genAI.getGenerativeModel({
-      model: modelName,
-      generationConfig: { responseMimeType: "application/json" }
-    });
-    const prompt = `
+  const prompt = `
 You are an expert Application Security Auditor reviewing a Pull Request.
 
 Target Files Changed: ${diffPayload.filesChanged.join(", ")}
@@ -4587,25 +4582,51 @@ Respond ONLY in valid JSON matching this schema:
   ]
 }
 `;
-    const result = await model.generateContent(prompt);
-    const responseText = result.response.text();
-    const parsed = JSON.parse(responseText);
-    return parsed;
-  } catch (error) {
-    const errMessage = error?.message || String(error);
-    return {
-      overallRisk: sastFindings.length > 0 ? "HIGH" : "LOW",
-      summary: `Gemini API call failed (${errMessage}). Falling back to deterministic SAST results.`,
-      findings: sastFindings.map((f) => ({
-        title: f.ruleId,
-        severity: f.severity,
-        file: f.file,
-        line: f.line,
-        description: f.description,
-        recommendation: "Review and remove flagged security patterns."
-      }))
-    };
+  const candidateModels = Array.from(/* @__PURE__ */ new Set([modelName, "gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-pro-latest"]));
+  const genAI = new GoogleGenerativeAI(apiKey);
+  let lastError = null;
+  for (const currentModel of candidateModels) {
+    let attempt = 0;
+    let delay = 2e3;
+    while (attempt < maxRetries) {
+      try {
+        if (attempt > 0) {
+          console.log(`\u{1F504} Retrying Gemini API call (${currentModel}) - Attempt ${attempt + 1}/${maxRetries} after ${delay}ms...`);
+          await sleep(delay);
+          delay *= 2;
+        }
+        const model = genAI.getGenerativeModel({
+          model: currentModel,
+          generationConfig: { responseMimeType: "application/json" }
+        });
+        const result = await model.generateContent(prompt);
+        const responseText = result.response.text();
+        const parsed = JSON.parse(responseText);
+        return parsed;
+      } catch (error) {
+        lastError = error;
+        const errMessage2 = error?.message || String(error);
+        if (errMessage2.includes("404") || errMessage2.includes("not found")) {
+          console.warn(`\u26A0\uFE0F Model ${currentModel} returned 404/Not Found. Trying fallback model...`);
+          break;
+        }
+        attempt++;
+      }
+    }
   }
+  const errMessage = lastError?.message || String(lastError);
+  return {
+    overallRisk: sastFindings.length > 0 ? "HIGH" : "LOW",
+    summary: `Gemini API call failed after retries (${errMessage}). Falling back to deterministic SAST results.`,
+    findings: sastFindings.map((f) => ({
+      title: f.ruleId,
+      severity: f.severity,
+      file: f.file,
+      line: f.line,
+      description: f.description,
+      recommendation: "Review and remove flagged security patterns."
+    }))
+  };
 }
 
 // src/reporter.ts

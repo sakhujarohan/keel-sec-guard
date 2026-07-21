@@ -12,4 +12,4 @@ export interface AuditResult {
         recommendation: string;
     }>;
 }
-export declare function auditWithGemini(diffPayload: DiffPayload, sastFindings: SASTFinding[], apiKey: string, modelName?: string): Promise<AuditResult>;
+export declare function auditWithGemini(diffPayload: DiffPayload, sastFindings: SASTFinding[], apiKey: string, modelName?: string, maxRetries?: number): Promise<AuditResult>;
