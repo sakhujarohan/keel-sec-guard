@@ -25049,6 +25049,11 @@ Perform a security audit focusing on:
 2. OWASP Top 10 vulnerabilities (Injection, Broken Access Control, Data Exposure)
 3. Logic flaws, missing input validation, or unexpected side-effects
 
+CRITICAL RULES FOR FINDINGS:
+- ONLY include actual security vulnerabilities, security risks, or anti-patterns in the "findings" array.
+- DO NOT include positive notes, commendations, good practice praise, or items where recommendation is "No direct fix needed" or "No action required".
+- If the diff has no security vulnerabilities, return an empty "findings": [] array and describe the clean status in "summary".
+
 Respond ONLY in valid JSON matching this schema:
 {
   "overallRisk": "CRITICAL" | "HIGH" | "MEDIUM" | "LOW",
@@ -25085,6 +25090,15 @@ Respond ONLY in valid JSON matching this schema:
         const result = await model.generateContent(prompt);
         const responseText = result.response.text();
         const parsed = JSON.parse(responseText);
+        if (parsed.findings) {
+          parsed.findings = parsed.findings.filter((f) => {
+            const titleLower = (f.title || "").toLowerCase();
+            const recLower = (f.recommendation || "").toLowerCase();
+            if (titleLower.startsWith("positive") || titleLower.includes("commendation")) return false;
+            if (recLower.includes("no direct fix needed") || recLower.includes("no action required")) return false;
+            return true;
+          });
+        }
         return parsed;
       } catch (error) {
         lastError = error;
