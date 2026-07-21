@@ -9048,10 +9048,10 @@ async function setupSkills(ctx) {
     try {
       const versionId = await resolveSkillVersion(client, skill.skill_id, skill.version);
       const version = await client.beta.skills.versions.retrieve(versionId, { skill_id: skill.skill_id });
-      let dirname4 = path4.basename(version.name.trim());
-      if (dirname4 === "" || dirname4 === "." || dirname4 === "..")
-        dirname4 = skill.skill_id;
-      const dest = path4.resolve(skillsRoot, dirname4);
+      let dirname5 = path4.basename(version.name.trim());
+      if (dirname5 === "" || dirname5 === "." || dirname5 === "..")
+        dirname5 = skill.skill_id;
+      const dest = path4.resolve(skillsRoot, dirname5);
       if (dest !== skillsRoot && !dest.startsWith(skillsRoot + path4.sep)) {
         log.warn("skill name escapes the skills dir; skipping", {
           component: "agent-tool-context",
@@ -9566,8 +9566,8 @@ async function runWalkGrep(pattern, root, signal) {
     hits.push(line);
     return true;
   };
-  const stat2 = await fs4.stat(root).catch(() => null);
-  if (stat2?.isFile()) {
+  const stat3 = await fs4.stat(root).catch(() => null);
+  if (stat3?.isFile()) {
     await grepFile(root, re, push);
   } else {
     await walk(root, "", (rel) => grepFile(path5.join(root, rel), re, push), signal);
@@ -15974,6 +15974,26 @@ function extractDiff(targetBranch = "main", maxCharacters = 5e4) {
   }
 }
 
+// src/hook.ts
+import { mkdir, stat, writeFile } from "node:fs/promises";
+import { dirname, join } from "node:path";
+async function installGitHook(options) {
+  const { repoRoot, hookType = "pre-push", branch = "main", failOn = "HIGH" } = options;
+  const hookPath = join(repoRoot, ".git", "hooks", hookType);
+  const exists = await stat(hookPath).then(
+    () => true,
+    () => false
+  );
+  const scriptContent = `#!/bin/sh
+# Installed by keel-sec-guard
+# Runs a local security audit before ${hookType === "pre-push" ? "pushing" : "committing"}
+npx keel-sec-guard audit --branch ${branch} --fail-on ${failOn}
+`;
+  await mkdir(dirname(hookPath), { recursive: true });
+  await writeFile(hookPath, scriptContent, { mode: 493 });
+  return { path: `.git/hooks/${hookType}`, created: !exists };
+}
+
 // src/ignore.ts
 import fs from "node:fs";
 import path from "node:path";
@@ -17444,6 +17464,21 @@ program2.command("audit").description("Run a security audit against a target git
   } else {
     log("\u2705 Security audit passed thresholds.");
     process.exit(0);
+  }
+});
+program2.command("init-hook").description("Install a local git hook to run security audits automatically before commit or push").option("-t, --hook-type <type>", "Hook type: pre-push | pre-commit", "pre-push").option("-b, --branch <branch>", "Target git base branch to compare against", "main").option("-f, --fail-on <severity>", "Fail severity threshold: CRITICAL | HIGH | MEDIUM", "HIGH").action(async (options) => {
+  try {
+    const result = await installGitHook({
+      repoRoot: process.cwd(),
+      hookType: options.hookType,
+      branch: options.branch,
+      failOn: options.failOn
+    });
+    console.log(`\u2713 Installed local git security hook: ${result.path}`);
+    console.log(`  Every ${options.hookType} will now run keel-sec-guard audit against origin/${options.branch}.`);
+  } catch (error) {
+    console.error(`\u274C Failed to install git hook: ${error?.message || error}`);
+    process.exit(1);
   }
 });
 program2.parse();

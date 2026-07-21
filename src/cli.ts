@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { Command } from 'commander';
 import { extractDiff } from './diff.js';
+import { installGitHook } from './hook.js';
 import { filterAuditResult, filterSASTFindings, loadIgnoreRules } from './ignore.js';
 import { auditWithGemini } from './llm.js';
 import { formatMarkdownReport } from './reporter.js';
@@ -123,6 +124,29 @@ program
     } else {
       log('✅ Security audit passed thresholds.');
       process.exit(0);
+    }
+  });
+
+program
+  .command('init-hook')
+  .description('Install a local git hook to run security audits automatically before commit or push')
+  .option('-t, --hook-type <type>', 'Hook type: pre-push | pre-commit', 'pre-push')
+  .option('-b, --branch <branch>', 'Target git base branch to compare against', 'main')
+  .option('-f, --fail-on <severity>', 'Fail severity threshold: CRITICAL | HIGH | MEDIUM', 'HIGH')
+  .action(async (options) => {
+    try {
+      const result = await installGitHook({
+        repoRoot: process.cwd(),
+        hookType: options.hookType as 'pre-push' | 'pre-commit',
+        branch: options.branch,
+        failOn: options.failOn,
+      });
+
+      console.log(`✓ Installed local git security hook: ${result.path}`);
+      console.log(`  Every ${options.hookType} will now run keel-sec-guard audit against origin/${options.branch}.`);
+    } catch (error: any) {
+      console.error(`❌ Failed to install git hook: ${error?.message || error}`);
+      process.exit(1);
     }
   });
 
