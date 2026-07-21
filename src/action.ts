@@ -22,7 +22,7 @@ async function runAction() {
     const apiKey = core.getInput('gemini-api-key') || process.env.GEMINI_API_KEY || '';
     const anthropicApiKey = core.getInput('anthropic-api-key') || process.env.ANTHROPIC_API_KEY || '';
     const token = core.getInput('github-token') || process.env.GITHUB_TOKEN || '';
-    const model = core.getInput('model') || 'gemini-2.5-flash';
+    const model = core.getInput('model') || 'gemini-3.6-flash';
     const failOn = core.getInput('fail-on-severity') || 'HIGH';
     const outputDir = core.getInput('output-dir') || '';
     const ignoreRulesFlag = core.getInput('ignore-rules') || '';

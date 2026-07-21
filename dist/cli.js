@@ -17127,7 +17127,7 @@ Respond ONLY in valid JSON matching this schema:
   const geminiKeys = extractGeminiApiKeys(apiKeyInput);
   if (geminiKeys.length > 0) {
     const candidateModels = Array.from(
-      /* @__PURE__ */ new Set([modelName, "gemini-3.6-flash", "gemini-3.5-flash", "gemini-2.5-flash", "gemini-2.5-pro", "gemini-2.0-flash"])
+      /* @__PURE__ */ new Set([modelName, "gemini-3.6-flash", "gemini-3.5-flash", "gemini-3.5-flash-lite", "gemini-2.5-pro", "gemini-2.0-flash"])
     );
     for (const currentModel of candidateModels) {
       for (let keyIdx = 0; keyIdx < geminiKeys.length; keyIdx++) {
@@ -17166,7 +17166,7 @@ Respond ONLY in valid JSON matching this schema:
                 await sleep2(6e3);
               }
             } else if (errMessage.includes("404") || errMessage.includes("not found") || errMessage.includes("503") || errMessage.includes("high demand")) {
-              if (attempt >= 1) {
+              if (attempt >= 1 || keyIdx === geminiKeys.length - 1) {
                 console.warn(`\u26A1 Switching from ${currentModel} to fallback model...`);
                 break;
               }
@@ -17412,7 +17412,7 @@ try {
 }
 var program2 = new Command();
 program2.name("keel-sec-guard").description("Hybrid SAST + Gemini / Claude Security Audit tool for developer and agent diffs").version("1.0.0");
-program2.command("audit").description("Run a security audit against a target git branch diff").option("-b, --branch <branch>", "Target git base branch to compare against", "main").option("-m, --model <model>", "Gemini model to use", "gemini-2.5-flash").option("-f, --fail-on <severity>", "Fail exit status on severity: CRITICAL | HIGH | MEDIUM | NONE", "HIGH").option("-o, --output-dir <dir>", "Directory to save markdown report, log file, and JSON diagnostics", "").option("-i, --ignore-rules <rules>", "Comma-separated keywords/rules to mute (also loads .secguardignore if present)", "").option("--anthropic-api-key <key>", "Anthropic API key for Claude fallback if Gemini API fails or rate-limits", "").action(async (options) => {
+program2.command("audit").description("Run a security audit against a target git branch diff").option("-b, --branch <branch>", "Target git base branch to compare against", "main").option("-m, --model <model>", "Gemini model to use", "gemini-3.6-flash").option("-f, --fail-on <severity>", "Fail exit status on severity: CRITICAL | HIGH | MEDIUM | NONE", "HIGH").option("-o, --output-dir <dir>", "Directory to save markdown report, log file, and JSON diagnostics", "").option("-i, --ignore-rules <rules>", "Comma-separated keywords/rules to mute (also loads .secguardignore if present)", "").option("--anthropic-api-key <key>", "Anthropic API key for Claude fallback if Gemini API fails or rate-limits", "").action(async (options) => {
   const logs = [];
   const log = (msg) => {
     console.log(msg);

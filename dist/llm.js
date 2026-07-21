@@ -47,7 +47,7 @@ Respond ONLY in valid JSON matching this schema:
     // Aggregate and deduplicate all provided Gemini API keys
     const geminiKeys = extractGeminiApiKeys(apiKeyInput);
     if (geminiKeys.length > 0) {
-        const candidateModels = Array.from(new Set([modelName, 'gemini-3.6-flash', 'gemini-3.5-flash', 'gemini-2.5-flash', 'gemini-2.5-pro', 'gemini-2.0-flash']));
+        const candidateModels = Array.from(new Set([modelName, 'gemini-3.6-flash', 'gemini-3.5-flash', 'gemini-3.5-flash-lite', 'gemini-2.5-pro', 'gemini-2.0-flash']));
         for (const currentModel of candidateModels) {
             for (let keyIdx = 0; keyIdx < geminiKeys.length; keyIdx++) {
                 const currentKey = geminiKeys[keyIdx];
@@ -88,7 +88,7 @@ Respond ONLY in valid JSON matching this schema:
                             }
                         }
                         else if (errMessage.includes('404') || errMessage.includes('not found') || errMessage.includes('503') || errMessage.includes('high demand')) {
-                            if (attempt >= 1) {
+                            if (attempt >= 1 || keyIdx === geminiKeys.length - 1) {
                                 console.warn(`⚡ Switching from ${currentModel} to fallback model...`);
                                 break;
                             }

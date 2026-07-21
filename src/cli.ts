@@ -24,7 +24,7 @@ program
   .command('audit')
   .description('Run a security audit against a target git branch diff')
   .option('-b, --branch <branch>', 'Target git base branch to compare against', 'main')
-  .option('-m, --model <model>', 'Gemini model to use', 'gemini-2.5-flash')
+  .option('-m, --model <model>', 'Gemini model to use', 'gemini-3.6-flash')
   .option('-f, --fail-on <severity>', 'Fail exit status on severity: CRITICAL | HIGH | MEDIUM | NONE', 'HIGH')
   .option('-o, --output-dir <dir>', 'Directory to save markdown report, log file, and JSON diagnostics', '')
   .option('-i, --ignore-rules <rules>', 'Comma-separated keywords/rules to mute (also loads .secguardignore if present)', '')

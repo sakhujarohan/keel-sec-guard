@@ -37519,7 +37519,7 @@ Respond ONLY in valid JSON matching this schema:
   const geminiKeys = extractGeminiApiKeys(apiKeyInput);
   if (geminiKeys.length > 0) {
     const candidateModels = Array.from(
-      /* @__PURE__ */ new Set([modelName, "gemini-3.6-flash", "gemini-3.5-flash", "gemini-2.5-flash", "gemini-2.5-pro", "gemini-2.0-flash"])
+      /* @__PURE__ */ new Set([modelName, "gemini-3.6-flash", "gemini-3.5-flash", "gemini-3.5-flash-lite", "gemini-2.5-pro", "gemini-2.0-flash"])
     );
     for (const currentModel of candidateModels) {
       for (let keyIdx = 0; keyIdx < geminiKeys.length; keyIdx++) {
@@ -37558,7 +37558,7 @@ Respond ONLY in valid JSON matching this schema:
                 await sleep2(6e3);
               }
             } else if (errMessage.includes("404") || errMessage.includes("not found") || errMessage.includes("503") || errMessage.includes("high demand")) {
-              if (attempt >= 1) {
+              if (attempt >= 1 || keyIdx === geminiKeys.length - 1) {
                 console.warn(`\u26A1 Switching from ${currentModel} to fallback model...`);
                 break;
               }
@@ -37812,7 +37812,7 @@ async function runAction() {
     const apiKey = core.getInput("gemini-api-key") || process.env.GEMINI_API_KEY || "";
     const anthropicApiKey = core.getInput("anthropic-api-key") || process.env.ANTHROPIC_API_KEY || "";
     const token = core.getInput("github-token") || process.env.GITHUB_TOKEN || "";
-    const model = core.getInput("model") || "gemini-2.5-flash";
+    const model = core.getInput("model") || "gemini-3.6-flash";
     const failOn = core.getInput("fail-on-severity") || "HIGH";
     const outputDir = core.getInput("output-dir") || "";
     const ignoreRulesFlag = core.getInput("ignore-rules") || "";
