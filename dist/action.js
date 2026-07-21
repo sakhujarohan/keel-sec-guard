@@ -23991,7 +23991,11 @@ function filterAuditResult(auditResult, ignoreRules) {
   }
   let summary = auditResult.summary;
   if (mutedCount > 0) {
-    summary += ` (Muted ${mutedCount} finding(s) matching ignore rules).`;
+    if (remainingFindings.length === 0) {
+      summary = `All flagged security findings (${mutedCount}) were suppressed by configured ignore rules. No active security risks remain.`;
+    } else {
+      summary += ` (Muted ${mutedCount} finding(s) matching ignore rules).`;
+    }
   }
   return {
     overallRisk,

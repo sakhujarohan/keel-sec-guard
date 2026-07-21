@@ -32,6 +32,6 @@ describe('Ignore Engine', () => {
     const filtered = filterAuditResult(mockResult, ['elevated permissions']);
     expect(filtered.findings.length).toBe(0);
     expect(filtered.overallRisk).toBe('LOW');
-    expect(filtered.summary).toContain('Muted 1 finding(s)');
+    expect(filtered.summary).toContain('All flagged security findings (1) were suppressed');
   });
 });
