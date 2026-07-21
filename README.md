@@ -1,9 +1,10 @@
 # 🛡️ Keel Security Guard (`keel-sec-guard`)
 
+[![Release](https://img.shields.io/badge/Release-v1.0.0-brightgreen.svg)](https://github.com/sakhujarohan/keel-sec-guard/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.3-blue)](https://www.typescriptlang.org/)
 [![Node.js](https://img.shields.io/badge/Node.js-20%2B-green)](https://nodejs.org/)
-[![GitHub Actions](https://img.shields.io/badge/GitHub%20Actions-Composite-purple)](action.yml)
+[![GitHub Actions](https://img.shields.io/badge/GitHub%20Actions-v1-purple)](action.yml)
 
 > **Hybrid SAST + Google Gemini Security Reviewer for Developer & AI Agent Pull Requests.**
 
