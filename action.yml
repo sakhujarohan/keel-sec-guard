@@ -7,6 +7,10 @@ inputs:
     description: 'Google AI Studio Gemini API Key'
     required: false
     default: ''
+  anthropic-api-key:
+    description: 'Anthropic API Key for Claude fallback if Gemini API fails or is rate-limited'
+    required: false
+    default: ''
   github-token:
     description: 'GitHub Token for posting PR comments'
     required: false

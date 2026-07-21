@@ -5,7 +5,7 @@ import { filterAuditResult, filterSASTFindings, loadIgnoreRules } from './ignore
 import { auditWithGemini } from './llm.js';
 import { formatMarkdownReport } from './reporter.js';
 import { scanDiff } from './sast.js';
-import { type AuditRunArtifacts, writeRunArtifacts } from './writer.js';
+import { writeRunArtifacts } from './writer.js';
 
 // Auto-load .env if available locally
 try {
@@ -16,7 +16,7 @@ const program = new Command();
 
 program
   .name('keel-sec-guard')
-  .description('Hybrid SAST + Gemini Security Audit tool for developer and agent diffs')
+  .description('Hybrid SAST + Gemini / Claude Security Audit tool for developer and agent diffs')
   .version('1.0.0');
 
 program
@@ -27,6 +27,7 @@ program
   .option('-f, --fail-on <severity>', 'Fail exit status on severity: CRITICAL | HIGH | MEDIUM | NONE', 'HIGH')
   .option('-o, --output-dir <dir>', 'Directory to save markdown report, log file, and JSON diagnostics', '')
   .option('-i, --ignore-rules <rules>', 'Comma-separated keywords/rules to mute (also loads .secguardignore if present)', '')
+  .option('--anthropic-api-key <key>', 'Anthropic API key for Claude fallback if Gemini API fails or rate-limits', '')
   .action(async (options) => {
     const logs: string[] = [];
     const log = (msg: string) => {
@@ -71,17 +72,18 @@ program
     const sastFindings = filterSASTFindings(rawSastFindings, ignoreRules);
 
     const apiKey = process.env.GEMINI_API_KEY || '';
+    const anthropicApiKey = options.anthropicApiKey || process.env.ANTHROPIC_API_KEY || '';
     let geminiStatus: 'SUCCESS' | 'SKIPPED_NO_KEY' | 'FAILED_API_ERROR' = 'SUCCESS';
 
-    if (!apiKey) {
-      log('⚠️ GEMINI_API_KEY env variable not set. Running SAST scan only.');
+    if (!apiKey && !anthropicApiKey) {
+      log('⚠️ Neither GEMINI_API_KEY nor ANTHROPIC_API_KEY set. Running SAST scan only.');
       geminiStatus = 'SKIPPED_NO_KEY';
     } else {
-      log(`🤖 Invoking Google Gemini API (${options.model}) for semantic security review...`);
+      log(`🤖 Invoking LLM engine (${options.model} with Claude fallback) for security review...`);
     }
 
-    const rawAuditResult = await auditWithGemini(diffPayload, sastFindings, apiKey, options.model);
-    if (apiKey && rawAuditResult.summary.includes('failed after retries')) {
+    const rawAuditResult = await auditWithGemini(diffPayload, sastFindings, apiKey, options.model, 3, anthropicApiKey);
+    if ((apiKey || anthropicApiKey) && rawAuditResult.summary.includes('unavailable or exhausted')) {
       geminiStatus = 'FAILED_API_ERROR';
     }
 

@@ -1,3 +1,4 @@
+import Anthropic from '@anthropic-ai/sdk';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import type { DiffPayload } from './diff.js';
 import type { SASTFinding } from './sast.js';
@@ -23,22 +24,8 @@ export async function auditWithGemini(
   apiKey: string,
   modelName = 'gemini-2.5-flash',
   maxRetries = 3,
+  anthropicApiKey = process.env.ANTHROPIC_API_KEY || '',
 ): Promise<AuditResult> {
-  if (!apiKey) {
-    return {
-      overallRisk: sastFindings.some((f) => f.severity === 'CRITICAL' || f.severity === 'HIGH') ? 'HIGH' : 'LOW',
-      summary: 'Skipped Gemini LLM review (GEMINI_API_KEY not provided). SAST findings only.',
-      findings: sastFindings.map((f) => ({
-        title: f.ruleId,
-        severity: f.severity,
-        file: f.file,
-        line: f.line,
-        description: f.description,
-        recommendation: 'Review and remove hardcoded secrets or unsafe patterns.',
-      })),
-    };
-  }
-
   const prompt = `
 You are an expert Application Security Auditor reviewing a Pull Request.
 
@@ -82,80 +69,92 @@ Respond ONLY in valid JSON matching this schema:
 }
 `;
 
-  const candidateModels = Array.from(new Set([modelName, 'gemini-2.5-flash', 'gemini-2.5-pro', 'gemini-2.0-flash']));
-  const genAI = new GoogleGenerativeAI(apiKey);
-  let lastError: any = null;
+  if (apiKey) {
+    const candidateModels = Array.from(new Set([modelName, 'gemini-2.5-flash', 'gemini-2.5-pro', 'gemini-2.0-flash']));
+    const genAI = new GoogleGenerativeAI(apiKey);
+    let lastError: any = null;
 
-  for (const currentModel of candidateModels) {
-    let attempt = 0;
-    let delay = 2000;
+    for (const currentModel of candidateModels) {
+      let attempt = 0;
+      let delay = 2000;
 
-    while (attempt < maxRetries) {
-      try {
-        if (attempt > 0) {
-          console.log(`🔄 Retrying Gemini API call (${currentModel}) - Attempt ${attempt + 1}/${maxRetries} after ${delay}ms...`);
-          await sleep(delay);
-          delay *= 2;
-        }
-
-        const model = genAI.getGenerativeModel({
-          model: currentModel,
-          generationConfig: {
-            responseMimeType: 'application/json',
-            temperature: 0.1,
-            maxOutputTokens: 8192,
-          },
-        });
-
-        const result = await model.generateContent(prompt);
-        const responseText = result.response.text();
-        const parsed = JSON.parse(responseText) as AuditResult;
-
-        // Programmatically sanitize findings to strip positive notes or non-vulnerabilities
-        if (parsed.findings) {
-          parsed.findings = parsed.findings.filter((f) => {
-            const titleLower = (f.title || '').toLowerCase();
-            const recLower = (f.recommendation || '').toLowerCase();
-            if (titleLower.startsWith('positive') || titleLower.includes('commendation')) return false;
-            if (recLower.includes('no direct fix needed') || recLower.includes('no action required')) return false;
-            return true;
-          });
-        }
-
-        return parsed;
-      } catch (error: any) {
-        lastError = error;
-        const errMessage = error?.message || String(error);
-
-        console.warn(`⚠️ Gemini model ${currentModel} error (Attempt ${attempt + 1}): ${errMessage.split('\n')[0]}`);
-
-        // If 429 Rate limit, pause 8s to allow free-tier quota window to reset
-        if (errMessage.includes('429') || errMessage.includes('Quota exceeded')) {
-          console.warn(`⏳ Gemini rate limit (429) encountered. Pausing 8 seconds for quota reset...`);
-          await sleep(8000);
-        } else if (errMessage.includes('404') || errMessage.includes('not found') || errMessage.includes('503') || errMessage.includes('high demand')) {
-          if (attempt >= 1) {
-            console.warn(`⚡ Switching from ${currentModel} to fallback model...`);
-            break;
+      while (attempt < maxRetries) {
+        try {
+          if (attempt > 0) {
+            console.log(`🔄 Retrying Gemini API call (${currentModel}) - Attempt ${attempt + 1}/${maxRetries} after ${delay}ms...`);
+            await sleep(delay);
+            delay *= 2;
           }
-        }
 
-        attempt++;
+          const model = genAI.getGenerativeModel({
+            model: currentModel,
+            generationConfig: {
+              responseMimeType: 'application/json',
+              temperature: 0.1,
+              maxOutputTokens: 8192,
+            },
+          });
+
+          const result = await model.generateContent(prompt);
+          const responseText = result.response.text();
+          const parsed = JSON.parse(responseText) as AuditResult;
+          return sanitizeAuditResult(parsed);
+        } catch (error: any) {
+          lastError = error;
+          const errMessage = error?.message || String(error);
+
+          console.warn(`⚠️ Gemini model ${currentModel} error (Attempt ${attempt + 1}): ${errMessage.split('\n')[0]}`);
+
+          if (errMessage.includes('429') || errMessage.includes('Quota exceeded')) {
+            console.warn(`⏳ Gemini rate limit (429) encountered. Pausing 6 seconds...`);
+            await sleep(6000);
+          } else if (errMessage.includes('404') || errMessage.includes('not found') || errMessage.includes('503') || errMessage.includes('high demand')) {
+            if (attempt >= 1) {
+              console.warn(`⚡ Switching from ${currentModel} to fallback model...`);
+              break;
+            }
+          }
+
+          attempt++;
+        }
       }
     }
+    console.warn(`⚠️ Gemini API calls exhausted across all models.`);
+  } else {
+    console.log('⚠️ GEMINI_API_KEY not provided.');
   }
 
-  const rawErr = lastError?.message || String(lastError);
-  let cleanErr = rawErr.split('\n')[0];
-  if (cleanErr.includes('429') || cleanErr.includes('Quota exceeded')) {
-    cleanErr = 'Gemini LLM API rate limit exceeded (429).';
-  } else if (cleanErr.length > 120) {
-    cleanErr = `${cleanErr.slice(0, 120)}...`;
+  // -------------------------------------------------------------------------
+  // Anthropic Claude Ultimate Failover Leg
+  // -------------------------------------------------------------------------
+  if (anthropicApiKey) {
+    console.log('🤖 Failing over to Anthropic Claude (claude-3-5-sonnet-20241022) for security audit...');
+    try {
+      const anthropic = new Anthropic({ apiKey: anthropicApiKey });
+      const message = await anthropic.messages.create({
+        model: 'claude-3-5-sonnet-20241022',
+        max_tokens: 8192,
+        temperature: 0.1,
+        messages: [{ role: 'user', content: prompt }],
+      });
+
+      const block = message.content[0];
+      if (block && block.type === 'text') {
+        const jsonMatch = block.text.match(/\{[\s\S]*\}/);
+        if (jsonMatch) {
+          const parsed = JSON.parse(jsonMatch[0]) as AuditResult;
+          parsed.summary = `[Claude 3.5 Sonnet Audit] ${parsed.summary}`;
+          return sanitizeAuditResult(parsed);
+        }
+      }
+    } catch (claudeError: any) {
+      console.warn(`⚠️ Anthropic Claude failover error: ${claudeError?.message || claudeError}`);
+    }
   }
 
   return {
     overallRisk: sastFindings.length > 0 ? 'HIGH' : 'LOW',
-    summary: `${cleanErr} Falling back to deterministic SAST results.`,
+    summary: 'LLM API calls unavailable or exhausted. Falling back to deterministic SAST results.',
     findings: sastFindings.map((f) => ({
       title: f.ruleId,
       severity: f.severity,
@@ -165,4 +164,17 @@ Respond ONLY in valid JSON matching this schema:
       recommendation: 'Review and remove flagged security patterns.',
     })),
   };
+}
+
+function sanitizeAuditResult(parsed: AuditResult): AuditResult {
+  if (parsed.findings) {
+    parsed.findings = parsed.findings.filter((f) => {
+      const titleLower = (f.title || '').toLowerCase();
+      const recLower = (f.recommendation || '').toLowerCase();
+      if (titleLower.startsWith('positive') || titleLower.includes('commendation')) return false;
+      if (recLower.includes('no direct fix needed') || recLower.includes('no action required')) return false;
+      return true;
+    });
+  }
+  return parsed;
 }

@@ -2,7 +2,6 @@ import * as core from '@actions/core';
 import * as github from '@actions/github';
 import { extractDiff } from './diff.js';
 import { filterAuditResult, filterSASTFindings, loadIgnoreRules } from './ignore.js';
-
 import { auditWithGemini } from './llm.js';
 import { formatMarkdownReport } from './reporter.js';
 import { scanDiff } from './sast.js';
@@ -21,6 +20,7 @@ async function runAction() {
 
   try {
     const apiKey = core.getInput('gemini-api-key') || process.env.GEMINI_API_KEY || '';
+    const anthropicApiKey = core.getInput('anthropic-api-key') || process.env.ANTHROPIC_API_KEY || '';
     const token = core.getInput('github-token') || process.env.GITHUB_TOKEN || '';
     const model = core.getInput('model') || 'gemini-2.5-flash';
     const failOn = core.getInput('fail-on-severity') || 'HIGH';
@@ -47,15 +47,15 @@ async function runAction() {
 
     let geminiStatus: 'SUCCESS' | 'SKIPPED_NO_KEY' | 'FAILED_API_ERROR' = 'SUCCESS';
 
-    if (!apiKey) {
-      logWarning('⚠️ GEMINI_API_KEY input not provided. Proceeding with SAST scan results only.');
+    if (!apiKey && !anthropicApiKey) {
+      logWarning('⚠️ Neither GEMINI_API_KEY nor ANTHROPIC_API_KEY provided. Proceeding with SAST scan results only.');
       geminiStatus = 'SKIPPED_NO_KEY';
     } else {
-      logInfo(`🤖 Calling Google Gemini API (${model}) for security review...`);
+      logInfo(`🤖 Calling LLM engine (${model}) for security review...`);
     }
 
-    const rawAuditResult = await auditWithGemini(diffPayload, sastFindings, apiKey, model);
-    if (apiKey && rawAuditResult.summary.includes('failed after retries')) {
+    const rawAuditResult = await auditWithGemini(diffPayload, sastFindings, apiKey, model, 3, anthropicApiKey);
+    if ((apiKey || anthropicApiKey) && rawAuditResult.summary.includes('unavailable or exhausted')) {
       geminiStatus = 'FAILED_API_ERROR';
     }
 
