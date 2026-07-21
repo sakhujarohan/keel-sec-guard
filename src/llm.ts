@@ -72,7 +72,6 @@ Respond ONLY in valid JSON matching this schema:
   if (apiKey) {
     const candidateModels = Array.from(new Set([modelName, 'gemini-2.5-flash', 'gemini-2.5-pro', 'gemini-2.0-flash']));
     const genAI = new GoogleGenerativeAI(apiKey);
-    let lastError: any = null;
 
     for (const currentModel of candidateModels) {
       let attempt = 0;
@@ -100,7 +99,6 @@ Respond ONLY in valid JSON matching this schema:
           const parsed = JSON.parse(responseText) as AuditResult;
           return sanitizeAuditResult(parsed);
         } catch (error: any) {
-          lastError = error;
           const errMessage = error?.message || String(error);
 
           console.warn(`⚠️ Gemini model ${currentModel} error (Attempt ${attempt + 1}): ${errMessage.split('\n')[0]}`);
@@ -125,30 +123,34 @@ Respond ONLY in valid JSON matching this schema:
   }
 
   // -------------------------------------------------------------------------
-  // Anthropic Claude Ultimate Failover Leg
+  // Anthropic Claude Ultimate Failover Leg (Latest Sonnet Models)
   // -------------------------------------------------------------------------
   if (anthropicApiKey) {
-    console.log('🤖 Failing over to Anthropic Claude (claude-3-5-sonnet-20241022) for security audit...');
-    try {
-      const anthropic = new Anthropic({ apiKey: anthropicApiKey });
-      const message = await anthropic.messages.create({
-        model: 'claude-3-5-sonnet-20241022',
-        max_tokens: 8192,
-        temperature: 0.1,
-        messages: [{ role: 'user', content: prompt }],
-      });
+    const claudeModels = ['claude-3-7-sonnet-latest', 'claude-3-5-sonnet-latest'];
+    const anthropic = new Anthropic({ apiKey: anthropicApiKey });
 
-      const block = message.content[0];
-      if (block && block.type === 'text') {
-        const jsonMatch = block.text.match(/\{[\s\S]*\}/);
-        if (jsonMatch) {
-          const parsed = JSON.parse(jsonMatch[0]) as AuditResult;
-          parsed.summary = `[Claude 3.5 Sonnet Audit] ${parsed.summary}`;
-          return sanitizeAuditResult(parsed);
+    for (const claudeModel of claudeModels) {
+      console.log(`🤖 Failing over to Anthropic Claude (${claudeModel}) for security audit...`);
+      try {
+        const message = await anthropic.messages.create({
+          model: claudeModel,
+          max_tokens: 8192,
+          temperature: 0.1,
+          messages: [{ role: 'user', content: prompt }],
+        });
+
+        const block = message.content[0];
+        if (block && block.type === 'text') {
+          const jsonMatch = block.text.match(/\{[\s\S]*\}/);
+          if (jsonMatch) {
+            const parsed = JSON.parse(jsonMatch[0]) as AuditResult;
+            parsed.summary = `[Claude Sonnet Audit] ${parsed.summary}`;
+            return sanitizeAuditResult(parsed);
+          }
         }
+      } catch (claudeError: any) {
+        console.warn(`⚠️ Anthropic Claude API error (${claudeModel}): ${claudeError?.message || claudeError}`);
       }
-    } catch (claudeError: any) {
-      console.warn(`⚠️ Anthropic Claude failover error: ${claudeError?.message || claudeError}`);
     }
   }
 
