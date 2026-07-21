@@ -1,0 +1,29 @@
+name: 'Keel Security Guard'
+description: 'Hybrid SAST + Gemini LLM Security Reviewer for Agent & Developer PRs'
+author: 'Rohan Sakhuja'
+
+inputs:
+  gemini-api-key:
+    description: 'Google AI Studio Gemini API Key'
+    required: false
+    default: ''
+  github-token:
+    description: 'GitHub Token for posting PR comments'
+    required: false
+    default: ${{ github.token }}
+  model:
+    description: 'Gemini model to use'
+    required: false
+    default: 'gemini-1.5-flash'
+  fail-on-severity:
+    description: 'Severity threshold to fail the build: CRITICAL | HIGH | MEDIUM | NONE'
+    required: false
+    default: 'HIGH'
+  output-dir:
+    description: 'Directory path to save audit report markdown, log file, and JSON diagnostics'
+    required: false
+    default: ''
+
+runs:
+  using: 'node20'
+  main: 'dist/action.js'

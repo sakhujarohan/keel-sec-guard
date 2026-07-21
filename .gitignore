@@ -1,0 +1,13 @@
+# Node
+node_modules/
+dist/
+*.tsbuildinfo
+
+# Environment
+.env
+.env.local
+
+# OS & Editors
+.DS_Store
+.idea/
+.vscode/
