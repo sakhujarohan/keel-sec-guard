@@ -82,7 +82,7 @@ Respond ONLY in valid JSON matching this schema:
 }
 `;
 
-  const candidateModels = Array.from(new Set([modelName, 'gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-pro-latest']));
+  const candidateModels = Array.from(new Set([modelName, 'gemini-2.5-flash', 'gemini-2.5-pro', 'gemini-2.0-flash']));
   const genAI = new GoogleGenerativeAI(apiKey);
   let lastError: any = null;
 
