@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { Command } from 'commander';
 import { extractDiff } from './diff.js';
+import { filterAuditResult, filterSASTFindings, loadIgnoreRules } from './ignore.js';
 import { auditWithGemini } from './llm.js';
 import { formatMarkdownReport } from './reporter.js';
 import { scanDiff } from './sast.js';
@@ -25,6 +26,7 @@ program
   .option('-m, --model <model>', 'Gemini model to use', 'gemini-2.5-flash')
   .option('-f, --fail-on <severity>', 'Fail exit status on severity: CRITICAL | HIGH | MEDIUM | NONE', 'HIGH')
   .option('-o, --output-dir <dir>', 'Directory to save markdown report, log file, and JSON diagnostics', '')
+  .option('-i, --ignore-rules <rules>', 'Comma-separated keywords/rules to mute (also loads .secguardignore if present)', '')
   .action(async (options) => {
     const logs: string[] = [];
     const log = (msg: string) => {
@@ -35,6 +37,11 @@ program
       console.error(msg);
       logs.push(`[${new Date().toISOString()}] ERROR: ${msg}`);
     };
+
+    const ignoreRules = loadIgnoreRules(options.ignoreRules);
+    if (ignoreRules.length > 0) {
+      log(`🙈 Loaded ignore rules: ${ignoreRules.join(', ')}`);
+    }
 
     log(`🔍 Extracting git diff against origin/${options.branch}...`);
     const diffPayload = extractDiff(options.branch);
@@ -60,7 +67,8 @@ program
     }
 
     log(`🔒 Running SAST & Secret Scanner on ${diffPayload.filesChanged.length} changed file(s)...`);
-    const sastFindings = scanDiff(diffPayload);
+    const rawSastFindings = scanDiff(diffPayload);
+    const sastFindings = filterSASTFindings(rawSastFindings, ignoreRules);
 
     const apiKey = process.env.GEMINI_API_KEY || '';
     let geminiStatus: 'SUCCESS' | 'SKIPPED_NO_KEY' | 'FAILED_API_ERROR' = 'SUCCESS';
@@ -72,11 +80,12 @@ program
       log(`🤖 Invoking Google Gemini API (${options.model}) for semantic security review...`);
     }
 
-    const auditResult = await auditWithGemini(diffPayload, sastFindings, apiKey, options.model);
-    if (apiKey && auditResult.summary.includes('failed or timed out')) {
+    const rawAuditResult = await auditWithGemini(diffPayload, sastFindings, apiKey, options.model);
+    if (apiKey && rawAuditResult.summary.includes('failed after retries')) {
       geminiStatus = 'FAILED_API_ERROR';
     }
 
+    const auditResult = filterAuditResult(rawAuditResult, ignoreRules);
     const markdownReport = formatMarkdownReport(auditResult, sastFindings);
     log('\n' + markdownReport + '\n');
 

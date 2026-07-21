@@ -23,6 +23,10 @@ inputs:
     description: 'Directory path to save audit report markdown, log file, and JSON diagnostics'
     required: false
     default: ''
+  ignore-rules:
+    description: 'Comma-separated keywords or rule IDs to mute from reports (also reads .secguardignore)'
+    required: false
+    default: ''
 
 runs:
   using: 'node20'

@@ -1199,8 +1199,8 @@ var require_command = __commonJS({
   "node_modules/commander/lib/command.js"(exports) {
     var EventEmitter = __require("node:events").EventEmitter;
     var childProcess = __require("node:child_process");
-    var path2 = __require("node:path");
-    var fs2 = __require("node:fs");
+    var path3 = __require("node:path");
+    var fs3 = __require("node:fs");
     var process2 = __require("node:process");
     var { Argument: Argument2, humanReadableArgName } = require_argument();
     var { CommanderError: CommanderError2 } = require_error();
@@ -2194,7 +2194,7 @@ Expecting one of '${allowedValues.join("', '")}'`);
        * @param {string} subcommandName
        */
       _checkForMissingExecutable(executableFile, executableDir, subcommandName) {
-        if (fs2.existsSync(executableFile)) return;
+        if (fs3.existsSync(executableFile)) return;
         const executableDirMessage = executableDir ? `searched for local subcommand relative to directory '${executableDir}'` : "no directory for search for local subcommand, use .executableDir() to supply a custom directory";
         const executableMissing = `'${executableFile}' does not exist
  - if '${subcommandName}' is not meant to be an executable command, remove description parameter from '.command()' and use '.description()' instead
@@ -2212,11 +2212,11 @@ Expecting one of '${allowedValues.join("', '")}'`);
         let launchWithNode = false;
         const sourceExt = [".js", ".ts", ".tsx", ".mjs", ".cjs"];
         function findFile(baseDir, baseName) {
-          const localBin = path2.resolve(baseDir, baseName);
-          if (fs2.existsSync(localBin)) return localBin;
-          if (sourceExt.includes(path2.extname(baseName))) return void 0;
+          const localBin = path3.resolve(baseDir, baseName);
+          if (fs3.existsSync(localBin)) return localBin;
+          if (sourceExt.includes(path3.extname(baseName))) return void 0;
           const foundExt = sourceExt.find(
-            (ext) => fs2.existsSync(`${localBin}${ext}`)
+            (ext) => fs3.existsSync(`${localBin}${ext}`)
           );
           if (foundExt) return `${localBin}${foundExt}`;
           return void 0;
@@ -2228,21 +2228,21 @@ Expecting one of '${allowedValues.join("', '")}'`);
         if (this._scriptPath) {
           let resolvedScriptPath;
           try {
-            resolvedScriptPath = fs2.realpathSync(this._scriptPath);
+            resolvedScriptPath = fs3.realpathSync(this._scriptPath);
           } catch {
             resolvedScriptPath = this._scriptPath;
           }
-          executableDir = path2.resolve(
-            path2.dirname(resolvedScriptPath),
+          executableDir = path3.resolve(
+            path3.dirname(resolvedScriptPath),
             executableDir
           );
         }
         if (executableDir) {
           let localFile = findFile(executableDir, executableFile);
           if (!localFile && !subcommand._executableFile && this._scriptPath) {
-            const legacyName = path2.basename(
+            const legacyName = path3.basename(
               this._scriptPath,
-              path2.extname(this._scriptPath)
+              path3.extname(this._scriptPath)
             );
             if (legacyName !== this._name) {
               localFile = findFile(
@@ -2253,7 +2253,7 @@ Expecting one of '${allowedValues.join("', '")}'`);
           }
           executableFile = localFile || executableFile;
         }
-        launchWithNode = sourceExt.includes(path2.extname(executableFile));
+        launchWithNode = sourceExt.includes(path3.extname(executableFile));
         let proc;
         if (process2.platform !== "win32") {
           if (launchWithNode) {
@@ -3168,7 +3168,7 @@ Expecting one of '${allowedValues.join("', '")}'`);
        * @return {Command}
        */
       nameFromFilename(filename) {
-        this._name = path2.basename(filename, path2.extname(filename));
+        this._name = path3.basename(filename, path3.extname(filename));
         return this;
       }
       /**
@@ -3182,9 +3182,9 @@ Expecting one of '${allowedValues.join("', '")}'`);
        * @param {string} [path]
        * @return {(string|null|Command)}
        */
-      executableDir(path3) {
-        if (path3 === void 0) return this._executableDir;
-        this._executableDir = path3;
+      executableDir(path4) {
+        if (path4 === void 0) return this._executableDir;
+        this._executableDir = path4;
         return this;
       }
       /**
@@ -3522,6 +3522,70 @@ function extractDiff(targetBranch = "main", maxCharacters = 5e4) {
       isTruncated: false
     };
   }
+}
+
+// src/ignore.ts
+import fs from "node:fs";
+import path from "node:path";
+function loadIgnoreRules(ignoreFlag = "", ignoreFile = ".secguardignore") {
+  const rules = [];
+  if (ignoreFlag) {
+    for (const rule of ignoreFlag.split(",")) {
+      const trimmed = rule.trim();
+      if (trimmed) rules.push(trimmed.toLowerCase());
+    }
+  }
+  try {
+    const filePath = path.resolve(ignoreFile);
+    if (fs.existsSync(filePath)) {
+      const content = fs.readFileSync(filePath, "utf-8");
+      for (const line of content.split("\n")) {
+        const trimmed = line.trim();
+        if (trimmed && !trimmed.startsWith("#")) {
+          rules.push(trimmed.toLowerCase());
+        }
+      }
+    }
+  } catch {
+  }
+  return Array.from(new Set(rules));
+}
+function isIgnored(text, ignoreRules) {
+  if (!text || ignoreRules.length === 0) return false;
+  const lowerText = text.toLowerCase();
+  return ignoreRules.some((rule) => lowerText.includes(rule));
+}
+function filterAuditResult(auditResult, ignoreRules) {
+  if (ignoreRules.length === 0 || !auditResult.findings) return auditResult;
+  const remainingFindings = auditResult.findings.filter((item) => {
+    const fullText = `${item.title} ${item.description} ${item.file || ""}`;
+    return !isIgnored(fullText, ignoreRules);
+  });
+  const mutedCount = auditResult.findings.length - remainingFindings.length;
+  let overallRisk = "LOW";
+  if (remainingFindings.some((f) => f.severity === "CRITICAL")) {
+    overallRisk = "CRITICAL";
+  } else if (remainingFindings.some((f) => f.severity === "HIGH")) {
+    overallRisk = "HIGH";
+  } else if (remainingFindings.some((f) => f.severity === "MEDIUM")) {
+    overallRisk = "MEDIUM";
+  }
+  let summary = auditResult.summary;
+  if (mutedCount > 0) {
+    summary += ` (Muted ${mutedCount} finding(s) matching ignore rules).`;
+  }
+  return {
+    overallRisk,
+    summary,
+    findings: remainingFindings
+  };
+}
+function filterSASTFindings(sastFindings, ignoreRules) {
+  if (ignoreRules.length === 0) return sastFindings;
+  return sastFindings.filter((item) => {
+    const fullText = `${item.ruleId} ${item.description} ${item.file} ${item.snippet || ""}`;
+    return !isIgnored(fullText, ignoreRules);
+  });
 }
 
 // node_modules/@google/generative-ai/dist/index.mjs
@@ -4751,16 +4815,16 @@ function scanDiff(diffPayload) {
 }
 
 // src/writer.ts
-import fs from "node:fs";
-import path from "node:path";
+import fs2 from "node:fs";
+import path2 from "node:path";
 function writeRunArtifacts(outputDir, markdownReport, artifacts) {
   if (!outputDir) return;
   try {
-    const resolvedDir = path.resolve(outputDir);
-    fs.mkdirSync(resolvedDir, { recursive: true });
-    const gitignorePath = path.join(resolvedDir, ".gitignore");
-    if (!fs.existsSync(gitignorePath)) {
-      fs.writeFileSync(
+    const resolvedDir = path2.resolve(outputDir);
+    fs2.mkdirSync(resolvedDir, { recursive: true });
+    const gitignorePath = path2.join(resolvedDir, ".gitignore");
+    if (!fs2.existsSync(gitignorePath)) {
+      fs2.writeFileSync(
         gitignorePath,
         `# Auto-generated by keel-sec-guard: Ignore all audit artifacts
 *
@@ -4768,13 +4832,13 @@ function writeRunArtifacts(outputDir, markdownReport, artifacts) {
         "utf-8"
       );
     }
-    const reportPath = path.join(resolvedDir, "audit-report.md");
-    fs.writeFileSync(reportPath, markdownReport, "utf-8");
-    const jsonPath = path.join(resolvedDir, "audit-run.json");
-    fs.writeFileSync(jsonPath, JSON.stringify(artifacts, null, 2), "utf-8");
-    const logPath = path.join(resolvedDir, "audit.log");
+    const reportPath = path2.join(resolvedDir, "audit-report.md");
+    fs2.writeFileSync(reportPath, markdownReport, "utf-8");
+    const jsonPath = path2.join(resolvedDir, "audit-run.json");
+    fs2.writeFileSync(jsonPath, JSON.stringify(artifacts, null, 2), "utf-8");
+    const logPath = path2.join(resolvedDir, "audit.log");
     const logContent = artifacts.logs.join("\n");
-    fs.writeFileSync(logPath, logContent, "utf-8");
+    fs2.writeFileSync(logPath, logContent, "utf-8");
     console.log(`\u{1F4C1} Saved audit artifacts to ${resolvedDir}/`);
     console.log(`   \u251C\u2500\u2500 .gitignore (auto-created)`);
     console.log(`   \u251C\u2500\u2500 audit-report.md`);
@@ -4792,7 +4856,7 @@ try {
 }
 var program2 = new Command();
 program2.name("keel-sec-guard").description("Hybrid SAST + Gemini Security Audit tool for developer and agent diffs").version("1.0.0");
-program2.command("audit").description("Run a security audit against a target git branch diff").option("-b, --branch <branch>", "Target git base branch to compare against", "main").option("-m, --model <model>", "Gemini model to use", "gemini-2.5-flash").option("-f, --fail-on <severity>", "Fail exit status on severity: CRITICAL | HIGH | MEDIUM | NONE", "HIGH").option("-o, --output-dir <dir>", "Directory to save markdown report, log file, and JSON diagnostics", "").action(async (options) => {
+program2.command("audit").description("Run a security audit against a target git branch diff").option("-b, --branch <branch>", "Target git base branch to compare against", "main").option("-m, --model <model>", "Gemini model to use", "gemini-2.5-flash").option("-f, --fail-on <severity>", "Fail exit status on severity: CRITICAL | HIGH | MEDIUM | NONE", "HIGH").option("-o, --output-dir <dir>", "Directory to save markdown report, log file, and JSON diagnostics", "").option("-i, --ignore-rules <rules>", "Comma-separated keywords/rules to mute (also loads .secguardignore if present)", "").action(async (options) => {
   const logs = [];
   const log = (msg) => {
     console.log(msg);
@@ -4802,6 +4866,10 @@ program2.command("audit").description("Run a security audit against a target git
     console.error(msg);
     logs.push(`[${(/* @__PURE__ */ new Date()).toISOString()}] ERROR: ${msg}`);
   };
+  const ignoreRules = loadIgnoreRules(options.ignoreRules);
+  if (ignoreRules.length > 0) {
+    log(`\u{1F648} Loaded ignore rules: ${ignoreRules.join(", ")}`);
+  }
   log(`\u{1F50D} Extracting git diff against origin/${options.branch}...`);
   const diffPayload = extractDiff(options.branch);
   if (!diffPayload.rawDiff.trim()) {
@@ -4824,7 +4892,8 @@ program2.command("audit").description("Run a security audit against a target git
     process.exit(0);
   }
   log(`\u{1F512} Running SAST & Secret Scanner on ${diffPayload.filesChanged.length} changed file(s)...`);
-  const sastFindings = scanDiff(diffPayload);
+  const rawSastFindings = scanDiff(diffPayload);
+  const sastFindings = filterSASTFindings(rawSastFindings, ignoreRules);
   const apiKey = process.env.GEMINI_API_KEY || "";
   let geminiStatus = "SUCCESS";
   if (!apiKey) {
@@ -4833,10 +4902,11 @@ program2.command("audit").description("Run a security audit against a target git
   } else {
     log(`\u{1F916} Invoking Google Gemini API (${options.model}) for semantic security review...`);
   }
-  const auditResult = await auditWithGemini(diffPayload, sastFindings, apiKey, options.model);
-  if (apiKey && auditResult.summary.includes("failed or timed out")) {
+  const rawAuditResult = await auditWithGemini(diffPayload, sastFindings, apiKey, options.model);
+  if (apiKey && rawAuditResult.summary.includes("failed after retries")) {
     geminiStatus = "FAILED_API_ERROR";
   }
+  const auditResult = filterAuditResult(rawAuditResult, ignoreRules);
   const markdownReport = formatMarkdownReport(auditResult, sastFindings);
   log("\n" + markdownReport + "\n");
   const severityLevels = ["NONE", "LOW", "MEDIUM", "HIGH", "CRITICAL"];

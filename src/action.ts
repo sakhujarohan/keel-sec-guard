@@ -1,6 +1,7 @@
 import * as core from '@actions/core';
 import * as github from '@actions/github';
 import { extractDiff } from './diff.js';
+import { filterAuditResult, filterSASTFindings, loadIgnoreRules } from './ignore.js';
 
 import { auditWithGemini } from './llm.js';
 import { formatMarkdownReport } from './reporter.js';
@@ -24,6 +25,12 @@ async function runAction() {
     const model = core.getInput('model') || 'gemini-2.5-flash';
     const failOn = core.getInput('fail-on-severity') || 'HIGH';
     const outputDir = core.getInput('output-dir') || '';
+    const ignoreRulesFlag = core.getInput('ignore-rules') || '';
+
+    const ignoreRules = loadIgnoreRules(ignoreRulesFlag);
+    if (ignoreRules.length > 0) {
+      logInfo(`🙈 Loaded ignore rules: ${ignoreRules.join(', ')}`);
+    }
 
     logInfo('🔍 Extracting Pull Request Git Diff...');
     const targetBranch = process.env.GITHUB_BASE_REF || 'main';
@@ -35,7 +42,8 @@ async function runAction() {
     }
 
     logInfo(`🔒 Running SAST & Secret Scanner on ${diffPayload.filesChanged.length} file(s)...`);
-    const sastFindings = scanDiff(diffPayload);
+    const rawSastFindings = scanDiff(diffPayload);
+    const sastFindings = filterSASTFindings(rawSastFindings, ignoreRules);
 
     let geminiStatus: 'SUCCESS' | 'SKIPPED_NO_KEY' | 'FAILED_API_ERROR' = 'SUCCESS';
 
@@ -46,11 +54,12 @@ async function runAction() {
       logInfo(`🤖 Calling Google Gemini API (${model}) for security review...`);
     }
 
-    const auditResult = await auditWithGemini(diffPayload, sastFindings, apiKey, model);
-    if (apiKey && auditResult.summary.includes('failed or timed out')) {
+    const rawAuditResult = await auditWithGemini(diffPayload, sastFindings, apiKey, model);
+    if (apiKey && rawAuditResult.summary.includes('failed after retries')) {
       geminiStatus = 'FAILED_API_ERROR';
     }
 
+    const auditResult = filterAuditResult(rawAuditResult, ignoreRules);
     const markdownReport = formatMarkdownReport(auditResult, sastFindings);
 
     if (token && github.context.payload.pull_request) {
