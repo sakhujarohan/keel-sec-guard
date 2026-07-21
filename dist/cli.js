@@ -4701,12 +4701,12 @@ Respond ONLY in valid JSON matching this schema:
         return parsed;
       } catch (error) {
         lastError = error;
-        const errMessage2 = error?.message || String(error);
-        console.warn(`\u26A0\uFE0F Gemini model ${currentModel} error (Attempt ${attempt + 1}): ${errMessage2}`);
-        if (errMessage2.includes("429") || errMessage2.includes("Quota exceeded")) {
-          console.warn(`\u23F3 Gemini rate limit (429) encountered. Pausing 6 seconds for quota reset...`);
-          await sleep(6e3);
-        } else if (errMessage2.includes("404") || errMessage2.includes("not found") || errMessage2.includes("503") || errMessage2.includes("high demand")) {
+        const errMessage = error?.message || String(error);
+        console.warn(`\u26A0\uFE0F Gemini model ${currentModel} error (Attempt ${attempt + 1}): ${errMessage.split("\n")[0]}`);
+        if (errMessage.includes("429") || errMessage.includes("Quota exceeded")) {
+          console.warn(`\u23F3 Gemini rate limit (429) encountered. Pausing 8 seconds for quota reset...`);
+          await sleep(8e3);
+        } else if (errMessage.includes("404") || errMessage.includes("not found") || errMessage.includes("503") || errMessage.includes("high demand")) {
           if (attempt >= 1) {
             console.warn(`\u26A1 Switching from ${currentModel} to fallback model...`);
             break;
@@ -4716,10 +4716,16 @@ Respond ONLY in valid JSON matching this schema:
       }
     }
   }
-  const errMessage = lastError?.message || String(lastError);
+  const rawErr = lastError?.message || String(lastError);
+  let cleanErr = rawErr.split("\n")[0];
+  if (cleanErr.includes("429") || cleanErr.includes("Quota exceeded")) {
+    cleanErr = "Gemini LLM API rate limit exceeded (429).";
+  } else if (cleanErr.length > 120) {
+    cleanErr = `${cleanErr.slice(0, 120)}...`;
+  }
   return {
     overallRisk: sastFindings.length > 0 ? "HIGH" : "LOW",
-    summary: `Gemini API call failed after retries (${errMessage}). Falling back to deterministic SAST results.`,
+    summary: `${cleanErr} Falling back to deterministic SAST results.`,
     findings: sastFindings.map((f) => ({
       title: f.ruleId,
       severity: f.severity,

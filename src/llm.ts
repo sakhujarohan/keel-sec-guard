@@ -127,12 +127,12 @@ Respond ONLY in valid JSON matching this schema:
         lastError = error;
         const errMessage = error?.message || String(error);
 
-        console.warn(`⚠️ Gemini model ${currentModel} error (Attempt ${attempt + 1}): ${errMessage}`);
+        console.warn(`⚠️ Gemini model ${currentModel} error (Attempt ${attempt + 1}): ${errMessage.split('\n')[0]}`);
 
-        // If 429 Rate limit, pause 6s to allow free-tier quota window to reset
+        // If 429 Rate limit, pause 8s to allow free-tier quota window to reset
         if (errMessage.includes('429') || errMessage.includes('Quota exceeded')) {
-          console.warn(`⏳ Gemini rate limit (429) encountered. Pausing 6 seconds for quota reset...`);
-          await sleep(6000);
+          console.warn(`⏳ Gemini rate limit (429) encountered. Pausing 8 seconds for quota reset...`);
+          await sleep(8000);
         } else if (errMessage.includes('404') || errMessage.includes('not found') || errMessage.includes('503') || errMessage.includes('high demand')) {
           if (attempt >= 1) {
             console.warn(`⚡ Switching from ${currentModel} to fallback model...`);
@@ -145,10 +145,17 @@ Respond ONLY in valid JSON matching this schema:
     }
   }
 
-  const errMessage = lastError?.message || String(lastError);
+  const rawErr = lastError?.message || String(lastError);
+  let cleanErr = rawErr.split('\n')[0];
+  if (cleanErr.includes('429') || cleanErr.includes('Quota exceeded')) {
+    cleanErr = 'Gemini LLM API rate limit exceeded (429).';
+  } else if (cleanErr.length > 120) {
+    cleanErr = `${cleanErr.slice(0, 120)}...`;
+  }
+
   return {
     overallRisk: sastFindings.length > 0 ? 'HIGH' : 'LOW',
-    summary: `Gemini API call failed after retries (${errMessage}). Falling back to deterministic SAST results.`,
+    summary: `${cleanErr} Falling back to deterministic SAST results.`,
     findings: sastFindings.map((f) => ({
       title: f.ruleId,
       severity: f.severity,
