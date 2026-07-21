@@ -22,7 +22,7 @@ export async function auditWithGemini(
   sastFindings: SASTFinding[],
   apiKey: string,
   modelName = 'gemini-2.5-flash',
-  maxRetries = 3,
+  maxRetries = 2,
 ): Promise<AuditResult> {
   if (!apiKey) {
     return {
@@ -80,7 +80,7 @@ Respond ONLY in valid JSON matching this schema:
 
   for (const currentModel of candidateModels) {
     let attempt = 0;
-    let delay = 2000;
+    let delay = 1500;
 
     while (attempt < maxRetries) {
       try {
@@ -103,10 +103,14 @@ Respond ONLY in valid JSON matching this schema:
         lastError = error;
         const errMessage = error?.message || String(error);
 
-        // If model doesn't exist (404), break immediately to try next candidate model
-        if (errMessage.includes('404') || errMessage.includes('not found')) {
-          console.warn(`⚠️ Model ${currentModel} returned 404/Not Found. Trying fallback model...`);
-          break;
+        console.warn(`⚠️ Gemini model ${currentModel} error (Attempt ${attempt + 1}): ${errMessage}`);
+
+        // If 404/Not Found or 503 high demand, fail over quickly to next model
+        if (errMessage.includes('404') || errMessage.includes('not found') || errMessage.includes('503') || errMessage.includes('high demand')) {
+          if (attempt >= 1) {
+            console.warn(`⚡ Switching from ${currentModel} to fallback model...`);
+            break;
+          }
         }
 
         attempt++;

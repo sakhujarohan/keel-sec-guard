@@ -1,6 +1,6 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-export async function auditWithGemini(diffPayload, sastFindings, apiKey, modelName = 'gemini-2.5-flash', maxRetries = 3) {
+export async function auditWithGemini(diffPayload, sastFindings, apiKey, modelName = 'gemini-2.5-flash', maxRetries = 2) {
     if (!apiKey) {
         return {
             overallRisk: sastFindings.some((f) => f.severity === 'CRITICAL' || f.severity === 'HIGH') ? 'HIGH' : 'LOW',
@@ -54,7 +54,7 @@ Respond ONLY in valid JSON matching this schema:
     let lastError = null;
     for (const currentModel of candidateModels) {
         let attempt = 0;
-        let delay = 2000;
+        let delay = 1500;
         while (attempt < maxRetries) {
             try {
                 if (attempt > 0) {
@@ -74,10 +74,13 @@ Respond ONLY in valid JSON matching this schema:
             catch (error) {
                 lastError = error;
                 const errMessage = error?.message || String(error);
-                // If model doesn't exist (404), break immediately to try next candidate model
-                if (errMessage.includes('404') || errMessage.includes('not found')) {
-                    console.warn(`⚠️ Model ${currentModel} returned 404/Not Found. Trying fallback model...`);
-                    break;
+                console.warn(`⚠️ Gemini model ${currentModel} error (Attempt ${attempt + 1}): ${errMessage}`);
+                // If 404/Not Found or 503 high demand, fail over quickly to next model
+                if (errMessage.includes('404') || errMessage.includes('not found') || errMessage.includes('503') || errMessage.includes('high demand')) {
+                    if (attempt >= 1) {
+                        console.warn(`⚡ Switching from ${currentModel} to fallback model...`);
+                        break;
+                    }
                 }
                 attempt++;
             }
