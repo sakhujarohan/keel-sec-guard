@@ -47,7 +47,8 @@ Respond ONLY in valid JSON matching this schema:
     // Aggregate and deduplicate all provided Gemini API keys
     const geminiKeys = extractGeminiApiKeys(apiKeyInput);
     if (geminiKeys.length > 0) {
-        const candidateModels = Array.from(new Set([modelName, 'gemini-3.6-flash', 'gemini-3.5-flash', 'gemini-3.5-flash-lite', 'gemini-2.5-pro', 'gemini-2.0-flash']));
+        // Only use official Gemini 3 models (Gemini 2.x models removed)
+        const candidateModels = Array.from(new Set([modelName, 'gemini-3.6-flash', 'gemini-3.5-flash', 'gemini-3.5-flash-lite']));
         for (const currentModel of candidateModels) {
             for (let keyIdx = 0; keyIdx < geminiKeys.length; keyIdx++) {
                 const currentKey = geminiKeys[keyIdx];
@@ -98,7 +99,7 @@ Respond ONLY in valid JSON matching this schema:
                 }
             }
         }
-        console.warn(`⚠️ Gemini API calls exhausted across all keys and models.`);
+        console.warn(`⚠️ Gemini 3 API calls exhausted across all keys and models.`);
     }
     else {
         console.log('⚠️ No GEMINI_API_KEY provided.');
