@@ -6,7 +6,6 @@ import type { SASTFinding } from './sast.js';
 export function loadIgnoreRules(ignoreFlag = '', ignoreFile = '.secguardignore'): string[] {
   const rules: string[] = [];
 
-  // 1. Read ignoreFlag if provided (comma separated)
   if (ignoreFlag) {
     for (const rule of ignoreFlag.split(',')) {
       const trimmed = rule.trim();
@@ -14,7 +13,6 @@ export function loadIgnoreRules(ignoreFlag = '', ignoreFile = '.secguardignore')
     }
   }
 
-  // 2. Read .secguardignore if present in CWD
   try {
     const filePath = path.resolve(ignoreFile);
     if (fs.existsSync(filePath)) {
@@ -34,7 +32,19 @@ export function loadIgnoreRules(ignoreFlag = '', ignoreFile = '.secguardignore')
 export function isIgnored(text: string, ignoreRules: string[]): boolean {
   if (!text || ignoreRules.length === 0) return false;
   const lowerText = text.toLowerCase();
-  return ignoreRules.some((rule) => lowerText.includes(rule));
+
+  return ignoreRules.some((rule) => {
+    // 1. Direct substring match
+    if (lowerText.includes(rule)) return true;
+
+    // 2. Token match: all space-separated words in the rule exist in lowerText
+    const tokens = rule.split(/\s+/).filter(Boolean);
+    if (tokens.length > 1 && tokens.every((token) => lowerText.includes(token))) {
+      return true;
+    }
+
+    return false;
+  });
 }
 
 export function filterAuditResult(auditResult: AuditResult, ignoreRules: string[]): AuditResult {

@@ -3553,7 +3553,14 @@ function loadIgnoreRules(ignoreFlag = "", ignoreFile = ".secguardignore") {
 function isIgnored(text, ignoreRules) {
   if (!text || ignoreRules.length === 0) return false;
   const lowerText = text.toLowerCase();
-  return ignoreRules.some((rule) => lowerText.includes(rule));
+  return ignoreRules.some((rule) => {
+    if (lowerText.includes(rule)) return true;
+    const tokens = rule.split(/\s+/).filter(Boolean);
+    if (tokens.length > 1 && tokens.every((token) => lowerText.includes(token))) {
+      return true;
+    }
+    return false;
+  });
 }
 function filterAuditResult(auditResult, ignoreRules) {
   if (ignoreRules.length === 0 || !auditResult.findings) return auditResult;
