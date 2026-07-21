@@ -28,12 +28,15 @@ Git Diff Payload:
 ${diffPayload.rawDiff}
 \`\`\`
 
-Perform a security audit focusing on:
+Perform an exhaustive, full-coverage security audit focusing on:
 1. Hardcoded credentials or secrets
-2. OWASP Top 10 vulnerabilities (Injection, Broken Access Control, Data Exposure)
-3. Logic flaws, missing input validation, or unexpected side-effects
+2. OWASP Top 10 vulnerabilities (Injection, Broken Access Control, Path Traversal, Data Exposure)
+3. Logic flaws, missing input validation, architectural bypasses, or unexpected side-effects
 
-CRITICAL RULES FOR FINDINGS:
+CRITICAL EXHAUSTIVE AUDIT REQUIREMENTS:
+- You MUST perform an EXHAUSTIVE and COMPREHENSIVE scan of the ENTIRE diff across ALL modified files in a single pass.
+- Do NOT stop after finding the first one or two issues. You must analyze every file changed and report EVERY CRITICAL, HIGH, and MEDIUM security vulnerability found across the entire diff in one unified response.
+- Do NOT truncate or omit vulnerabilities.
 - ONLY include actual security vulnerabilities, security risks, or anti-patterns in the "findings" array.
 - DO NOT include positive notes, commendations, good practice praise, or items where recommendation is "No direct fix needed" or "No action required".
 - If the diff has no security vulnerabilities, return an empty "findings": [] array and describe the clean status in "summary".
@@ -69,7 +72,11 @@ Respond ONLY in valid JSON matching this schema:
                 }
                 const model = genAI.getGenerativeModel({
                     model: currentModel,
-                    generationConfig: { responseMimeType: 'application/json' },
+                    generationConfig: {
+                        responseMimeType: 'application/json',
+                        temperature: 0.1,
+                        maxOutputTokens: 8192,
+                    },
                 });
                 const result = await model.generateContent(prompt);
                 const responseText = result.response.text();
